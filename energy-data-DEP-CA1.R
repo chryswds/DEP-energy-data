@@ -135,3 +135,17 @@ h8 <- ggplot(energy_clean, aes(x = log_total_energy_per_capita_kwh)) + geom_hist
   labs(title = "Energy per capita (log)", x = "log(primary energy per capita, kWh)", y = "Count (country-years)") + theme_minimal()
 grid.arrange(h1, h2, h3, h4, h5, h6, h7, h8, ncol = 2,
              top = "Before and after natural log transformation (2000-2022)")
+
+# ==== 5. Feature engineering ====
+# Create per-capita, log and grouped share features and save cleaned data
+energy_clean <- energy_clean %>%
+  mutate(gdp_per_capita = gdp / population,
+         log_gdp_per_capita = log(gdp_per_capita),
+         fossil_share_pct = round(coal_electricity_share_pct + gas_electricity_share_pct +
+                                    oil_electricity_share_pct, 2),
+         low_carbon_share_pct = round(nuclear_electricity_share_pct + hydro_electricity_share_pct +
+                                        wind_electricity_share_pct + solar_electricity_share_pct, 2))
+print(head(energy_clean))
+str(energy_clean)
+print(dim(energy_clean))
+write.csv(energy_clean, "energy_cleaned.csv", row.names = FALSE)

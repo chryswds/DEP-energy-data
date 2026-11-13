@@ -149,3 +149,41 @@ print(head(energy_clean))
 str(energy_clean)
 print(dim(energy_clean))
 write.csv(energy_clean, "energy_cleaned.csv", row.names = FALSE)
+
+# ==== 6. Variation ====
+# Summaries and binned counts of the main variables
+print(summary(energy_clean[, c("gdp_per_capita", "total_energy_per_capita_kwh", "electricity_generation_twh",
+                               "fossil_share_pct", "low_carbon_share_pct",
+                               "electricity_carbon_intensity_gco2eq_per_kwh")]))
+print(energy_clean %>% count(fossil_share_band = cut_width(fossil_share_pct, width = 10, boundary = 0)))
+print(energy_clean %>% count(gdp_per_capita_band = cut_width(gdp_per_capita, width = 10000, boundary = 0)))
+
+# ==== 7. Covariation ====
+# Correlation matrix, heatmap and strongest pairs
+cor_vars <- c("log_population", "log_gdp_per_capita", "log_total_energy_per_capita_kwh",
+              "log_electricity_generation_twh", share_cols,
+              "electricity_carbon_intensity_gco2eq_per_kwh", "fossil_share_pct", "low_carbon_share_pct")
+cor_labels <- c("log population", "log GDP pc", "log energy pc", "log generation",
+                "coal", "gas", "oil", "nuclear", "hydro", "wind", "solar",
+                "carbon intensity", "fossil", "low-carbon")
+cor_mat <- cor(energy_clean[, cor_vars])
+print(round(cor_mat, 2))
+
+cor_long <- melt(cor_mat)
+cor_heat <- cor_long %>%
+  mutate(Var1 = factor(Var1, levels = cor_vars, labels = cor_labels),
+         Var2 = factor(Var2, levels = cor_vars, labels = cor_labels))
+p3 <- ggplot(cor_heat, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(value, 2)), size = 2.5) +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0, limits = c(-1, 1)) +
+  labs(title = "Correlation heatmap of energy, wealth and electricity mix variables (2000-2022)",
+       x = "Variable", y = "Variable", fill = "Pearson r") +
+  theme_minimal()
+print(p3)
+
+top_pairs <- cor_long %>%
+  filter(as.character(Var1) < as.character(Var2)) %>%
+  arrange(desc(abs(value))) %>%
+  head(10)
+print(top_pairs %>% mutate(value = round(value, 3)))

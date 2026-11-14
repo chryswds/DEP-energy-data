@@ -187,3 +187,114 @@ top_pairs <- cor_long %>%
   arrange(desc(abs(value))) %>%
   head(10)
 print(top_pairs %>% mutate(value = round(value, 3)))
+
+# ==== 8. Questions ====
+# Q1-Q5 on wealth, renewables, coal, carbon intensity and five countries
+cat("Q1 correlation (log GDP per capita vs log energy per capita):",
+    round(cor(energy_clean$log_gdp_per_capita, energy_clean$log_total_energy_per_capita_kwh), 3), "\n")
+p4 <- ggplot(energy_clean, aes(x = log_gdp_per_capita, y = log_total_energy_per_capita_kwh, color = year)) +
+  geom_point(alpha = 0.5) +
+  labs(title = "Q1: GDP per capita vs primary energy per capita (2000-2022)",
+       x = "log(GDP per capita, international $)", y = "log(primary energy per capita, kWh)", color = "Year") +
+  theme_minimal()
+print(p4)
+
+energy_2022 <- energy_clean %>% filter(year == 2022)
+print(energy_2022 %>% arrange(desc(gdp_per_capita)) %>%
+        select(country, gdp_per_capita, total_energy_per_capita_kwh) %>% head(10))
+print(energy_2022 %>% arrange(gdp_per_capita) %>%
+        select(country, gdp_per_capita, total_energy_per_capita_kwh) %>% head(10))
+
+ws_2000 <- energy_clean %>% filter(year == 2000) %>%
+  mutate(wind_solar = wind_electricity_share_pct + solar_electricity_share_pct) %>% select(country, wind_solar)
+ws_2022 <- energy_2022 %>%
+  mutate(wind_solar = wind_electricity_share_pct + solar_electricity_share_pct) %>% select(country, wind_solar)
+ws_2000 <- ws_2000 %>% filter(country %in% ws_2022$country) %>% arrange(country)
+ws_2022 <- ws_2022 %>% filter(country %in% ws_2000$country) %>% arrange(country)
+ws_change <- data.frame(country = ws_2000$country,
+                        wind_solar_2000 = round(ws_2000$wind_solar, 2),
+                        wind_solar_2022 = round(ws_2022$wind_solar, 2),
+                        increase = round(ws_2022$wind_solar - ws_2000$wind_solar, 2))
+top15 <- ws_change %>% arrange(desc(increase)) %>% head(15)
+print(top15)
+top15$country <- factor(top15$country, levels = top15$country[order(top15$increase)])
+p5 <- ggplot(top15, aes(x = country, y = increase)) +
+  geom_col(fill = "darkgreen") +
+  coord_flip() +
+  labs(title = "Q2: Top 15 countries by increase in wind + solar share (2000 to 2022)",
+       x = "Country", y = "Increase in wind + solar share of electricity (percentage points)") +
+  theme_minimal()
+print(p5)
+
+income_cuts <- quantile(energy_clean$gdp_per_capita, c(0.33, 0.66))
+print(round(income_cuts, 2))
+energy_clean <- energy_clean %>%
+  mutate(income_group = factor(ifelse(gdp_per_capita <= income_cuts[1], "Low",
+                                      ifelse(gdp_per_capita <= income_cuts[2], "Middle", "High")),
+                               levels = c("Low", "Middle", "High")))
+print(table(energy_clean$income_group))
+
+years <- min(energy_clean$year):max(energy_clean$year)
+coal <- energy_clean$coal_electricity_share_pct
+coal_by_year <- data.frame(
+  year = years,
+  Low = sapply(years, function(y) mean(coal[energy_clean$year == y & energy_clean$income_group == "Low"])),
+  Middle = sapply(years, function(y) mean(coal[energy_clean$year == y & energy_clean$income_group == "Middle"])),
+  High = sapply(years, function(y) mean(coal[energy_clean$year == y & energy_clean$income_group == "High"])),
+  Overall = sapply(years, function(y) mean(coal[energy_clean$year == y])))
+print(round(coal_by_year, 2))
+coal_long <- melt(coal_by_year, id.vars = "year")
+p6 <- ggplot(coal_long, aes(x = year, y = value, color = variable)) +
+  geom_line(linewidth = 1) +
+  labs(title = "Q3: Average coal share of electricity by income group (2000-2022)",
+       x = "Year", y = "Average coal share of electricity (%)", color = "Income group") +
+  theme_minimal()
+print(p6)
+
+cat("Q4 correlation (fossil share vs carbon intensity):",
+    round(cor(energy_clean$fossil_share_pct, energy_clean$electricity_carbon_intensity_gco2eq_per_kwh), 3), "\n")
+cat("Q4 correlation (low-carbon share vs carbon intensity):",
+    round(cor(energy_clean$low_carbon_share_pct, energy_clean$electricity_carbon_intensity_gco2eq_per_kwh), 3), "\n")
+p7 <- ggplot(energy_clean, aes(x = low_carbon_share_pct, y = electricity_carbon_intensity_gco2eq_per_kwh,
+                               color = income_group)) +
+  geom_point(alpha = 0.5) +
+  labs(title = "Q4: Low-carbon share vs carbon intensity of electricity (2000-2022)",
+       x = "Low-carbon share of electricity (%)", y = "Carbon intensity (gCO2eq per kWh)",
+       color = "Income group") +
+  theme_minimal()
+print(p7)
+
+low_carbon_band <- cut_width(energy_clean$low_carbon_share_pct, width = 20, boundary = 0)
+bands <- levels(low_carbon_band)
+print(data.frame(low_carbon_band = bands,
+                 rows = as.numeric(table(low_carbon_band)),
+                 mean_carbon_intensity = round(sapply(bands, function(b)
+                   mean(energy_clean$electricity_carbon_intensity_gco2eq_per_kwh[low_carbon_band == b])), 1),
+                 row.names = NULL))
+
+focus_countries <- c("Ireland", "United Kingdom", "Germany", "Denmark", "France")
+focus <- energy_clean %>% filter(country %in% focus_countries) %>%
+  mutate(wind_solar_share_pct = round(wind_electricity_share_pct + solar_electricity_share_pct, 2))
+p8a <- ggplot(focus, aes(x = year, y = fossil_share_pct, color = country)) +
+  geom_line(linewidth = 1) +
+  labs(title = "Fossil share of electricity", x = "Year", y = "Fossil share (%)", color = "Country") +
+  theme_minimal()
+p8b <- ggplot(focus, aes(x = year, y = wind_solar_share_pct, color = country)) +
+  geom_line(linewidth = 1) +
+  labs(title = "Wind + solar share of electricity", x = "Year", y = "Wind + solar share (%)", color = "Country") +
+  theme_minimal()
+grid.arrange(p8a, p8b, ncol = 2, top = "Q5: Electricity transition in five European countries (2000-2022)")
+
+print(focus %>% filter(year == 2000 | year == 2022) %>%
+        select(country, year, fossil_share_pct, low_carbon_share_pct, wind_solar_share_pct,
+               electricity_carbon_intensity_gco2eq_per_kwh) %>%
+        arrange(country, year))
+
+# ==== 9. Unusual patterns ====
+# Hydro-dominated, oil-dependent and coal-heavy high income countries
+print(energy_clean %>% filter(hydro_electricity_share_pct > 90) %>% count(country) %>% arrange(desc(n)))
+print(energy_clean %>% filter(year == 2022) %>% arrange(desc(oil_electricity_share_pct)) %>%
+        select(country, oil_electricity_share_pct, income_group) %>% head(10))
+print(energy_clean %>% filter(year == 2022, income_group == "High") %>%
+        arrange(desc(coal_electricity_share_pct)) %>%
+        select(country, coal_electricity_share_pct, gdp_per_capita) %>% head(10))

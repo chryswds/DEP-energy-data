@@ -298,3 +298,49 @@ print(energy_clean %>% filter(year == 2022) %>% arrange(desc(oil_electricity_sha
 print(energy_clean %>% filter(year == 2022, income_group == "High") %>%
         arrange(desc(coal_electricity_share_pct)) %>%
         select(country, coal_electricity_share_pct, gdp_per_capita) %>% head(10))
+
+# ==== 10. Encoding ====
+# Label-encode income group and one-hot encode the main electricity source
+print(head(energy_clean %>% select(country, year, income_group)))
+energy_clean <- energy_clean %>%
+  mutate(income_group_code = as.numeric(factor(income_group, levels = c("Low", "Middle", "High"))))
+print(head(energy_clean %>% select(country, year, income_group, income_group_code)))
+print(table(energy_clean$income_group, energy_clean$income_group_code))
+
+source_names <- c("coal", "gas", "oil", "nuclear", "hydro", "wind", "solar")
+energy_clean$main_source <- source_names[apply(energy_clean[, share_cols], 1, which.max)]
+print(table(energy_clean$main_source))
+energy_clean <- energy_clean %>%
+  mutate(main_coal = ifelse(main_source == "coal", 1, 0),
+         main_gas = ifelse(main_source == "gas", 1, 0),
+         main_oil = ifelse(main_source == "oil", 1, 0),
+         main_nuclear = ifelse(main_source == "nuclear", 1, 0),
+         main_hydro = ifelse(main_source == "hydro", 1, 0),
+         main_wind = ifelse(main_source == "wind", 1, 0))
+print(head(energy_clean %>% select(country, year, main_source, main_coal:main_wind)))
+print(colSums(energy_clean %>% select(main_coal:main_wind)))
+write.csv(energy_clean, "energy_encoded.csv", row.names = FALSE)
+
+# ==== 11. Feature selection ====
+# Remove highly correlated candidate features with findCorrelation
+fs_features <- c(share_cols, "log_total_energy_per_capita_kwh", "electricity_carbon_intensity_gco2eq_per_kwh",
+                 "log_gdp_per_capita", "fossil_share_pct", "low_carbon_share_pct", "income_group_code")
+fs_cor <- cor(energy_clean[, fs_features])
+removed_features <- fs_features[findCorrelation(fs_cor, cutoff = 0.85)]
+cat("Removed features (|r| > 0.85):\n")
+print(removed_features)
+cat("Kept features:\n")
+print(fs_features[!(fs_features %in% removed_features)])
+
+# ==== 12. Scaling ====
+# Z-score standardisation of the PCA features
+pca_features <- c(share_cols, "log_total_energy_per_capita_kwh",
+                  "electricity_carbon_intensity_gco2eq_per_kwh", "income_group_code")
+pca_data <- energy_clean[, pca_features]
+pca_scaled <- scale(pca_data)
+print(data.frame(feature = pca_features,
+                 mean_before = round(sapply(pca_data, mean), 2),
+                 sd_before = round(sapply(pca_data, sd), 2),
+                 mean_after = round(apply(pca_scaled, 2, mean), 4),
+                 sd_after = round(apply(pca_scaled, 2, sd), 4),
+                 row.names = NULL))

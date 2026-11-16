@@ -344,3 +344,54 @@ print(data.frame(feature = pca_features,
                  mean_after = round(apply(pca_scaled, 2, mean), 4),
                  sd_after = round(apply(pca_scaled, 2, sd), 4),
                  row.names = NULL))
+
+# ==== 13. PCA ====
+# PCA on all years and on 2022 only, with scree, variable and individual plots
+print(sapply(pca_data, is.numeric))
+pca_res <- prcomp(pca_data, center = TRUE, scale. = TRUE)
+print(summary(pca_res))
+explained <- pca_res$sdev^2 / sum(pca_res$sdev^2)
+cumulative <- summary(pca_res)$importance[3, ]
+print(data.frame(PC = names(cumulative), explained = round(explained, 4),
+                 cumulative = round(cumulative, 4), row.names = NULL))
+n80 <- sum(cumulative < 0.80) + 1
+n90 <- sum(cumulative < 0.90) + 1
+cat("PCs needed for 80% variance:", n80, "\n")
+cat("PCs needed for 90% variance:", n90, "\n")
+print(data.frame(data = c("Original", "Reduced (90%)"),
+                 rows = c(nrow(pca_data), nrow(pca_res$x[, 1:n90])),
+                 columns = c(ncol(pca_data), ncol(pca_res$x[, 1:n90]))))
+print(round(pca_res$rotation[, 1:3], 3))
+
+pca_fm <- PCA(pca_data, scale.unit = TRUE, ncp = 10, graph = FALSE)
+print(round(pca_fm$eig, 3))
+print(round(pca_fm$var$contrib[, 1:3], 2))
+
+p9a <- fviz_eig(pca_fm, addlabels = TRUE, ncp = 10) +
+  labs(title = "Scree plot", x = "Principal component", y = "Explained variance (%)")
+p9b <- fviz_pca_var(pca_fm, col.var = "contrib") +
+  labs(title = "Variables on PC1 and PC2",
+       x = paste0("PC1 (", round(pca_fm$eig[1, 2], 1), "% of variance)"),
+       y = paste0("PC2 (", round(pca_fm$eig[2, 2], 1), "% of variance)"))
+grid.arrange(p9a, p9b, ncol = 2, top = "PCA of electricity mix, energy use and income (2000-2022)")
+
+energy_2022 <- energy_clean %>% filter(year == 2022)
+pca_2022_data <- data.frame(energy_2022[, pca_features], row.names = energy_2022$country)
+pca_2022 <- PCA(pca_2022_data, scale.unit = TRUE, ncp = 10, graph = FALSE)
+print(round(pca_2022$eig, 3))
+
+label_countries <- c("Ireland", "Norway", "China", "United States", "Germany", "France", "Brazil", "India")
+label_coords <- data.frame(country = label_countries,
+                           PC1 = pca_2022$ind$coord[label_countries, 1],
+                           PC2 = pca_2022$ind$coord[label_countries, 2],
+                           hjust = c(1.1, -0.1, -0.1, -0.1, 1.1, -0.1, -0.1, -0.1),
+                           vjust = c(-0.6, 0.5, 0.5, -0.6, 1.4, 0.5, 0.5, 0.5))
+p10 <- fviz_pca_ind(pca_2022, habillage = energy_2022$income_group, addEllipses = TRUE, label = "none") +
+  geom_point(data = label_coords, aes(x = PC1, y = PC2), inherit.aes = FALSE, size = 2) +
+  geom_text(data = label_coords, aes(x = PC1, y = PC2, label = country, hjust = hjust, vjust = vjust),
+            inherit.aes = FALSE, size = 3.5) +
+  labs(title = "PCA of countries in 2022 by income group",
+       x = paste0("PC1 (", round(pca_2022$eig[1, 2], 1), "% of variance)"),
+       y = paste0("PC2 (", round(pca_2022$eig[2, 2], 1), "% of variance)"),
+       color = "Income group", shape = "Income group", fill = "Income group")
+print(p10)
